@@ -1,3 +1,4 @@
 # Server configurations
 host: "localhost"
 port: 5001
+db: "ipfs-tag.db"

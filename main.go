@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -34,8 +35,13 @@ func main() {
 		defer sqliteDatabase.Close()                           // Defer Closing the database
 		createTable(sqliteDatabase)
 	}
-
-	addIPFSFile(cfg)
+	sqliteDatabase, _ := sql.Open("sqlite3", cfg.Database) // Open the created SQLite File
+	defer sqliteDatabase.Close()                           // Defer Closing the database
+	cid, err := addIPFSFile(cfg)
+	if err != nil {
+		log.Printf("Error adding String to IPFS: %s", err)
+	}
+	insertFile(sqliteDatabase, cid, "teststring", "/root/test")
 
 }
 
@@ -49,20 +55,22 @@ func createDataBase(dbFileName string) {
 	log.Println("database created")
 }
 
-func addIPFSFile(cfg Config) {
+// returns the CID and the possible error
+func addIPFSFile(cfg Config) (string, error) {
 	// Where your local node is running on localhost:5001
 	sh := shell.NewShell(cfg.Host + ":" + cfg.Port)
 	if !sh.IsUp() {
-		fmt.Println("Gateway is not up")
-		os.Exit(1)
+		log.Println("Gateway is not up")
+		return "", errors.New("gateway not up")
 	}
 
 	cid, err := sh.Add(strings.NewReader("hello world!"))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %s", err)
-		os.Exit(1)
+		return "", errors.New("cannot add hash")
 	}
-	fmt.Printf("added %s", cid)
+	log.Printf("added %s", cid)
+	return cid, nil
 }
 
 func createTable(db *sql.DB) {
@@ -80,4 +88,18 @@ func createTable(db *sql.DB) {
 	}
 	statement.Exec() // Execute SQL Statements
 	log.Println("File table created")
+}
+
+// We are passing db reference connection from main to our method with other parameters
+func insertFile(db *sql.DB, hash string, name string, path string) {
+	log.Println("Inserting file record ...")
+	insertFileSQL := `INSERT INTO files(hash, name, path) VALUES (?, ?, ?)`
+	statement, err := db.Prepare(insertFileSQL) // Prepare statement. This is good to avoid SQL injections
+	if err != nil {
+		log.Fatalln(err.Error())
+	}
+	_, err = statement.Exec(hash, name, path)
+	if err != nil {
+		log.Fatalln(err.Error())
+	}
 }

@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 
+	"database/sql"
+
 	"github.com/ilyakaznacheev/cleanenv"
 	shell "github.com/ipfs/go-ipfs-api"
 	_ "github.com/mattn/go-sqlite3" // Import go-sqlite3 library
@@ -28,6 +30,9 @@ func main() {
 	if _, err := os.Stat(cfg.Database); os.IsNotExist(err) {
 		log.Println("Database does not exist yet.")
 		createDataBase(cfg.Database)
+		sqliteDatabase, _ := sql.Open("sqlite3", cfg.Database) // Open the created SQLite File
+		defer sqliteDatabase.Close()                           // Defer Closing the database
+		createTable(sqliteDatabase)
 	}
 
 	addIPFSFile(cfg)
@@ -58,4 +63,21 @@ func addIPFSFile(cfg Config) {
 		os.Exit(1)
 	}
 	fmt.Printf("added %s", cid)
+}
+
+func createTable(db *sql.DB) {
+	createFileTableSQL := `CREATE TABLE files (
+		"idFile" integer NOT NULL PRIMARY KEY AUTOINCREMENT,		
+		"hash" TEXT,
+		"name" TEXT,
+		"path" TEXT		
+	  );` // SQL Statement for Create Table
+
+	log.Println("Create file table...")
+	statement, err := db.Prepare(createFileTableSQL) // Prepare SQL Statement
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+	statement.Exec() // Execute SQL Statements
+	log.Println("File table created")
 }
